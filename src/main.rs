@@ -1,6 +1,7 @@
 use axum::response::{IntoResponse, Response};
 use axum::{Router, http::StatusCode, routing::get};
 use std::env;
+use axum::body::Body;
 
 #[tokio::main]
 async fn main() {
@@ -28,11 +29,9 @@ async fn main() {
 
     let address = format!("{}:{}", host, port);
 
-    // build our application with a route
     let app = Router::new()
         .route("/", get(|| { get_url(url) }));
 
-    // run our app with hyper, listening globally on port 3000
     println!("Listening on {}", address);
 
     let listener = tokio::net::TcpListener::bind(address).await.unwrap();
@@ -40,17 +39,23 @@ async fn main() {
 }
 
 async fn get_url(url: String) -> impl IntoResponse {
-    let response = reqwest::get(url).await;
+    let outbound_response = reqwest::get(url).await;
 
-    if let Err(err) = response {
+    if let Err(err) = outbound_response {
         eprintln!("Error getting url: {:#?}", err);
 
         return StatusCode::INTERNAL_SERVER_ERROR.into_response();
     }
 
-    let response = response.unwrap();
+    let outbound_response = outbound_response.unwrap();
+    let headers = outbound_response.headers();
+    let mut response_builder = Response::builder();
 
-    let body = response.bytes().await;
+    for (key, value) in headers.iter() {
+        response_builder = response_builder.header(key, value);
+    }
+
+    let body = outbound_response.bytes().await;
 
     if let Err(err) = body {
         eprintln!("Error receiving body: {:#?}", err);
@@ -58,9 +63,12 @@ async fn get_url(url: String) -> impl IntoResponse {
         return StatusCode::INTERNAL_SERVER_ERROR.into_response();
     }
 
-    let body = body.unwrap();
+    match response_builder.body(Body::from(body.unwrap())) {
+        Ok(response) => response,
+        Err(err) => {
+            eprintln!("Error making response: {:#?}", err);
 
-    let response = Response::new(body.into());
-
-    response
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
 }
