@@ -14,6 +14,22 @@ machine:
     SERVER_HOST: "0.0.0.0"
     INSTALL_URL: "https://raw.githubusercontent.com/lttle-cloud/ignition/refs/heads/master/get/lttle.sh"
 ---
+machine:
+  namespace: install-sh
+  name: serve-resources
+  image: aifrim/install-sh:latest
+  resources:
+    cpu: 1
+    memory: 128
+  mode:
+    flash:
+      timeout: 1
+      strategy:
+        listen-on-port: 8080
+  environment:
+    SERVER_HOST: "0.0.0.0"
+    INSTALL_URL: "https://raw.githubusercontent.com/lttle-cloud/ignition/refs/heads/master/schemas/resources.json"
+---
 service:
   namespace: install-sh
   name: ingress
@@ -27,11 +43,25 @@ service:
       protocol: https
   certificate: cert
 ---
+service:
+  namespace: install-sh
+  name: ingress-resources
+  target:
+    name: serve-resources
+    port: 8080
+    protocol: http
+  bind:
+    external:
+      host: resources.lttle.sh
+      protocol: https
+  certificate: cert
+---
 certificate:
   namespace: install-sh
   name: cert
   domains:
     - install.lttle.sh
+    - resources.lttle.sh
   issuer:
     auto:
       provider: letsencrypt
